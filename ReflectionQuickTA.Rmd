@@ -1,0 +1,615 @@
+---
+title: "Reflection QuickTA"
+author: "IAI"
+date: "2024/2/16"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(stringr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(reshape2)
+library("ggbeeswarm")
+library(RColorBrewer)
+library(lemon)
+library(ggpubr)
+library(HH)
+```
+
+
+```{r}
+set.seed(566423)
+```
+
+
+# Study 1
+
+```{r}
+df <- read.csv('study1_qta_winter_343.csv')
+
+df <- df %>%
+  mutate(reflect = case_when(reflect == "0" ~ "Did not engage in reflection",
+                             reflect == "1" ~ "Engaged in reflection"))
+
+df$reflect <- as.factor(df$reflect)
+```
+
+```{r}
+df %>%
+  group_by(reflect) %>%
+  summarise(n())
+```
+
+
+
+```{r}
+df_homework <- df %>%
+  dplyr::select(total_score, reflect) %>%
+  mutate(when = "homework")
+
+df_final <- df %>%
+  dplyr::select(final_total_score, reflect) %>%
+  mutate(when = "final") %>%
+  rename(total_score = final_total_score)
+
+df_score <- rbind(df_homework, df_final)
+```
+
+
+```{r}
+test_homework_ref <- df_homework[df_homework$reflect == "Engaged in reflection", ]
+test_homework_noref <- df_homework[df_homework$reflect == "Did not engage in reflection", ]
+test_final_ref <- df_final[df_final$reflect == "Engaged in reflection", ]
+test_final_noref <- df_final[df_final$reflect == "Did not engage in reflection", ]
+```
+
+
+# Mann Whitney U Test for homework score:
+
+```{r}
+wilcox.test(test_homework_ref$total_score, test_homework_noref$total_score)
+```
+
+
+
+# Mann Whitney U Test for final score:
+
+```{r}
+wilcox.test(test_final_ref$total_score, test_final_noref$total_score)
+```
+
+
+
+```{r}
+sum <- df_score %>% 
+  group_by(reflect, when) %>% 
+  summarise(mean = mean(total_score ),
+            se = sd(total_score)/sqrt(n()))
+sum <- as.data.frame(sum)
+sum
+```
+
+```{r}
+sum_homework <- sum[sum$when == "homework", ]
+sum_final <- sum[sum$when == "final", ]
+```
+
+
+
+```{r}
+
+df_cn <- df %>% 
+  mutate(reflect = case_when(
+    reflect == "Engaged in reflection" ~ "Reflection", 
+    reflect == "Did not engage in reflection" ~ "No Reflection"))
+
+df_cn$reflect <- factor(df_cn$reflect, 
+                        levels = c("No Reflection", 
+                                   "Reflection"))
+
+sum_final_cn <- sum_final %>%
+  mutate(reflect = case_when(
+    reflect == "Engaged in reflection" ~ "Reflection", 
+    reflect == "Did not engage in reflection" ~ "No Reflection"))
+
+
+
+p2 <- df_cn %>%
+  ggplot(aes(x = reflect, y = final_total_score, color = reflect)) +
+  geom_jitter(
+    shape = 21,
+    alpha = 0.5, size = 3,
+    aes(fill = reflect), width = 0.2
+  ) +
+  scale_fill_manual(values = c("#af8dc3", "#7fbf7b")) +
+  scale_colour_manual(values=c("#762a83", "#1b7837")) + 
+  geom_point(data=sum_final_cn, aes(x = reflect, y = mean),
+    size=1.5, 
+    color="black",
+    position=position_dodge(width = 0.15)) +
+  ylim(0, 100) +
+  geom_errorbar(
+    data=sum_final_cn,
+    aes(x = reflect, y = mean, ymin=mean-se, ymax=mean+se), 
+    color="black",
+    width=0.05) +
+  geom_hline(
+    data=sum_final_cn,
+    aes(yintercept=mean, color = reflect), 
+    linetype = "dashed") +
+    scale_colour_manual(values=c("#762a83", "#1b7837")) +
+  labs(y="Score") +
+  ggtitle("Performance in Final Exam") +
+  theme_bw() +
+  theme(
+    legend.title=element_blank(),
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5), 
+    text=element_text(size=11),
+    axis.title.x = element_blank(),
+    #axis.title.y = element_blank()
+  )
+p2
+```
+
+
+```{r}
+df_init_confi <- df %>%
+  dplyr::select(init_confidence_1, reflect) %>%
+  rename(confidence = init_confidence_1) %>%
+  mutate(when = "Begining of Assignment")
+
+df_final_confi <- df %>%
+  dplyr::select(final_confidence_1, reflect) %>%
+  rename(confidence = final_confidence_1) %>%
+  mutate(when = "End of Assignment")
+  
+df_confi <- rbind(df_init_confi, df_final_confi)
+```
+
+
+```{r}
+sum_confi <- df_confi %>% 
+  group_by(when, reflect) %>% 
+  summarise(mean = mean(confidence ),
+            se = sd(confidence)/sqrt(n()))
+sum_confi <- as.data.frame(sum_confi)
+sum_confi
+```
+
+
+```{r}
+sum_confi$reflect <- factor(sum_confi$reflect, levels = c("Engaged in reflection", "Did not engage in reflection"))
+```
+
+
+
+
+```{r fig.height=4, fig.width=8}
+sum_confi_not <- sum_confi[sum_confi$reflect == "Did not engage in reflection", ]
+sum_confi_w <- sum_confi[sum_confi$reflect == "Engaged in reflection", ]
+
+not <- sum_confi_not %>%
+  ggplot(aes(x=when, y=mean, group=reflect)) +
+  geom_line()+
+  geom_point(size = 2) +
+  ylim(3.5, 5) +
+  labs(y = "Self-Confidence Level") +
+  scale_x_discrete(expand = c(0.15, 0.1), labels = c("Beginning of Assignment",
+                              "End of Assignment")) +
+  theme_bw() +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.03,
+                ) +
+  ggtitle("Did not engage in reflection") +
+  theme(
+        plot.title = element_text(hjust = 0.5, size=12),
+        legend.position = c(0.8, 0.85),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        text=element_text(size=11),
+  )
+
+www <- sum_confi_w %>%
+  ggplot(aes(x=when, y=mean, group=reflect)) +
+  geom_line()+
+  geom_point(size = 2) +
+  ylim(3.5, 5) +
+  labs(y = "Self-Confidence Level") +
+  scale_x_discrete(expand = c(0.15, 0.1), labels = c("Beginning of Assignment",
+                              "End of Assignment")) +
+  theme_bw() +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.03,
+                ) +
+  ggtitle("Engaged in reflection") +
+  theme(
+        plot.title = element_text(hjust = 0.5, size=12),
+        legend.position = c(0.8, 0.85),
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        text=element_text(size=11),
+  )
+
+grid.arrange(www,
+             not,
+             ncol=2, nrow = 1,
+             top=textGrob("Change in Self-Confidence based on Engagement in Reflection Activity in Study-1", gp = gpar(col = "black", fontsize = 13)),
+             left=textGrob("Self-Confidence Level", rot = 90)) 
+```
+
+
+
+```{r}
+sum_help <- df %>% 
+  group_by(reflect) %>% 
+  summarise(mean = mean(help_other_topics_1 ),
+            se = sd(help_other_topics_1)/sqrt(n()))
+sum_help <- as.data.frame(sum_help)
+sum_help
+```
+
+
+```{r}
+df_cn <- df %>% 
+  mutate(reflect = case_when(
+    reflect == "Engaged in reflection" ~ "Reflection", 
+    reflect == "Did not engage in reflection" ~ "No Reflection"))
+
+df_cn$reflect <- factor(df_cn$reflect, 
+                        levels = c("No Reflection", 
+                                   "Reflection"))
+
+sum_help_cn <- sum_help %>%
+  mutate(reflect = case_when(
+    reflect == "Engaged in reflection" ~ "Reflection", 
+    reflect == "Did not engage in reflection" ~ "No Reflection"))
+
+help <- df_cn %>%
+  ggplot(aes(x = reflect, y = help_other_topics_1, color = reflect)) +
+  geom_beeswarm(
+    shape = 21,
+    alpha = 0.5, size = 3,
+    aes(fill = reflect), width = 0.2
+  ) +
+  scale_fill_manual(values = c("#af8dc3", "#7fbf7b")) +
+  scale_colour_manual(values=c("#762a83", "#1b7837")) + 
+  scale_y_continuous(limits=c(1, 7), breaks = seq(1, 7, by = 1)) +
+  geom_point(data=sum_help_cn, aes(x = reflect, y = mean),
+    size=1.5, 
+    color="black",
+    position=position_dodge(width = 0.15)) +
+  geom_errorbar(
+    data=sum_help_cn,
+    aes(x = reflect, y = mean, ymin=mean-se, ymax=mean+se), 
+    color="black",
+    width=0.05) +
+  geom_hline(
+    data=sum_help_cn,
+    aes(yintercept=mean, color = reflect), 
+    linetype = "dashed") +
+    scale_colour_manual(values=c("#762a83", "#1b7837")) +
+  labs(y = "Average rating on a scale of 1 to 7") +
+  ggtitle("Perceived Helpfulness for Other Topics") +
+  theme_bw() +
+  theme(
+    legend.title=element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 12), 
+    text=element_text(size=11),
+    axis.title.x = element_blank(),
+  )
+help
+```
+
+
+```{r}
+d1 <- df %>% group_by(reflect, help_other_topics_1) %>%
+  summarise(n = n()) 
+d1 <- as.data.frame(d1)
+d1 <- d1 %>%
+  mutate(percent = case_when(reflect == "Engaged in reflection" ~ n/79,
+                             reflect == "Did not engage in reflection" ~ n/66))
+d1
+```
+
+
+```{r}
+sum_inter <- df %>% 
+  group_by(reflect) %>% 
+  summarise(mean = mean(interact_again_1),
+            se = sd(interact_again_1)/sqrt(n()))
+sum_inter <- as.data.frame(sum_inter)
+sum_inter
+```
+
+
+```{r}
+
+df_cn <- df %>% 
+  mutate(reflect = case_when(
+    reflect == "Engaged in reflection" ~ "Reflection", 
+    reflect == "Did not engage in reflection" ~ "No Reflection"))
+
+df_cn$reflect <- factor(df_cn$reflect, 
+                        levels = c("No Reflection", 
+                                   "Reflection"))
+
+sum_inter_cn <- sum_inter %>%
+  mutate(reflect = case_when(
+    reflect == "Engaged in reflection" ~ "Reflection", 
+    reflect == "Did not engage in reflection" ~ "No Reflection"))
+
+
+inter <- df_cn %>%
+  ggplot(aes(x = reflect, y = interact_again_1, color = reflect)) +
+  geom_beeswarm(
+    shape = 21,
+    alpha = 0.5, size = 3,
+    aes(fill = reflect), width = 0.2
+  ) +
+  scale_fill_manual(values = c("#af8dc3", "#7fbf7b")) +
+  scale_colour_manual(values=c("#762a83", "#1b7837")) +
+  scale_y_continuous(limits=c(1, 7), breaks = seq(1, 7, by = 1)) +
+  geom_point(data=sum_inter_cn, aes(x = reflect, y = mean),
+    size=1.5, 
+    color="black",
+    position=position_dodge(width = 0.15)) +
+  geom_errorbar(
+    data=sum_inter_cn,
+    aes(x = reflect, y = mean, ymin=mean-se, ymax=mean+se), 
+    color="black",
+    width=0.05) +
+  geom_hline(
+    data=sum_inter_cn,
+    aes(yintercept=mean, color = reflect), 
+    linetype = "dashed") +
+    scale_colour_manual(values=c("#762a83", "#1b7837")) +
+  labs(y = "Average rating on a scale of 1 to 7") +
+  ggtitle("Willingness to Interact Again") +
+  theme_bw() +
+  theme(
+    legend.title=element_blank(), 
+    plot.title = element_text(hjust = 0.5), 
+    text=element_text(size=11),
+    axis.title.x = element_blank(),
+    #axis.title.y = element_blank()
+  )
+inter
+```
+
+
+```{r}
+d2 <- df %>% group_by(reflect, interact_again_1) %>%
+  summarise(n = n()) 
+d2 <- as.data.frame(d2)
+d2 <- d2 %>%
+  mutate(percent = case_when(reflect == "Engaged in reflection" ~ n/79,
+                             reflect == "Did not engage in reflection" ~ n/66))
+d2
+```
+
+
+```{r fig.height=5, fig.width=12}
+
+grid_arrange_shared_legend(
+  p2,
+  help, 
+  inter, 
+  position='top',
+  ncol=3, nrow = 1
+  #top=textGrob("Outcome Measures for Study-1", gp = gpar(col = "black", fontsize = 18))
+  #left=textGrob(rot = 90)
+)
+
+```
+
+# Study2
+
+```{r}
+new_df <- read.csv('study2_merged_homework_final_confidence.csv')
+
+new_df$condition_no <- factor(new_df$condition_no, 
+                                   levels = c("Questionnaire-Based Reflection",
+                                              "LLM-Based Reflection", 
+                                              "Revision of Important Slides"))
+```
+
+
+```{r}
+n_df_homework <- new_df %>%
+  dplyr::select(homework_score, condition_no) %>%
+  mutate(when = "homework") %>%
+  rename(score = homework_score)
+
+n_df_final <- new_df %>%
+  dplyr::select(final_score, condition_no) %>%
+  mutate(when = "final") %>%
+  rename(score = final_score)
+
+n_df_score <- rbind(n_df_homework, n_df_final)
+```
+
+
+
+```{r}
+new_sum <- n_df_score %>% 
+  group_by(when, condition_no) %>% 
+  summarise(mean = mean(score ),
+            se = sd(score)/sqrt(n()))
+new_sum <- as.data.frame(new_sum)
+new_sum
+```
+
+
+```{r}
+new_sum_homework <- new_sum[new_sum$when == "homework", ]
+new_sum_final <- new_sum[new_sum$when == "final", ]
+```
+
+
+```{r fig.height=4, fig.width=7}
+new_p2 <- new_df %>%
+  ggplot(aes(x = condition_no, y = final_score, color = condition_no)) +
+  geom_jitter(
+    shape = 21,
+    alpha = 0.5, size = 3,
+    aes(fill = condition_no), width = 0.2
+  ) +
+  scale_fill_manual(values = c("#af8dc3", "#7fbf7b", "#64b5f6")) +
+  scale_colour_manual(values=c("#762a83", "#1b7837", "#1565c0")) + 
+  geom_point(data=new_sum_final, aes(x = condition_no, y = mean),
+    size=1.5, 
+    color="black",
+    position=position_dodge(width = 0.15)) +
+  ylim(0, 100) +
+  geom_errorbar(
+    data=new_sum_final,
+    aes(x = condition_no, y = mean, ymin=mean-se, ymax=mean+se), 
+    color="black",
+    width=0.05) +
+  geom_hline(
+    data=new_sum_final,
+    aes(yintercept=mean, color = condition_no), 
+    linetype = "dashed") +
+    scale_colour_manual(values=c("#762a83", "#1b7837", "#1565c0")) +
+  labs(y = "Score") +
+  scale_x_discrete(labels = c("Questionnaire-Based Reflection\nCondition-1",
+                              "LLM-Based Reflection\nCondition-2", 
+                              "Revision of Important Slides\nCondition-3")) +
+  ggtitle("Performance in Final Exam in Study-2") +
+  theme_bw() +
+  theme(
+    legend.position="none", 
+    legend.title=element_blank(), 
+    plot.title = element_text(hjust = 0.5), 
+    text=element_text(size=11),
+    axis.title.x = element_blank(),
+    #axis.title.y = element_blank()
+  )
+new_p2
+```
+
+
+
+```{r}
+new_df_init_confi <- new_df %>%
+  dplyr::select(initial_confidence, condition_no) %>%
+  rename(confidence = initial_confidence) %>%
+  mutate(when = "Begining of Assignment")
+
+new_df_final_confi <- new_df %>%
+  dplyr::select(final_confidence, condition_no) %>%
+  rename(confidence = final_confidence) %>%
+  mutate(when = "End of Assignment")
+  
+new_df_confi <- rbind(new_df_init_confi, new_df_final_confi)
+```
+
+
+
+
+```{r}
+new_sum_confi <- new_df_confi %>% 
+  group_by(when, condition_no) %>% 
+  summarise(mean = mean(confidence ),
+            se = sd(confidence)/sqrt(n()))
+new_sum_confi <- as.data.frame(new_sum_confi)
+new_sum_confi
+```
+
+
+
+```{r}
+
+new_sum_confi_con1 <- new_sum_confi[new_sum_confi$condition_no == "Questionnaire-Based Reflection", ]
+new_sum_confi_con2 <- new_sum_confi[new_sum_confi$condition_no == "LLM-Based Reflection", ]
+new_sum_confi_con3 <- new_sum_confi[new_sum_confi$condition_no == "Revision of Important Slides", ]
+
+
+new_sum_confi_con1p <- new_sum_confi_con1 %>%
+  ggplot(aes(x=when, y=mean, group=condition_no)) +
+  geom_line()+
+  #scale_linetype_manual(values=c("solid", "dashed", "dotted"), name = "Condition")+
+  #scale_colour_manual(values=c("#E21818", "#2b9348", "#1565c0"), name = "Condition") +
+  geom_point(size = 2) +
+  ylim(1.5, 3) +
+  labs(y = "Self-Confidence Level") +
+  theme_bw() +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.03,
+                ) +
+  ggtitle("Questionnaire-Based Reflection") +
+  scale_x_discrete(expand = c(0.15, 0.1), labels = c("Beginning of Reflection",
+                              "End of Reflection")) +
+  theme(
+        plot.title = element_text(hjust = 0.5, size=12),
+        legend.position = c(0.9, 0.85),
+        #legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        text=element_text(size=11),
+  )
+
+new_sum_confi_con2p <- new_sum_confi_con2 %>%
+  ggplot(aes(x=when, y=mean, group=condition_no)) +
+  geom_line()+
+  #scale_linetype_manual(values=c("solid", "dashed", "dotted"), name = "Condition")+
+  #scale_colour_manual(values=c("#E21818", "#2b9348", "#1565c0"), name = "Condition") +
+  geom_point(size = 2) +
+  ylim(1.5, 3) +
+  labs(y = "Self-Confidence Level") +
+  scale_x_discrete(expand = c(0.15, 0.1), labels = c("Beginning of Reflection",
+                              "End of Reflection")) +
+  theme_bw() +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.03,
+                ) +
+  ggtitle("LLM-Based Reflection") +
+  theme(
+        plot.title = element_text(hjust = 0.5, size=12),
+        legend.position = c(0.9, 0.85),
+        #legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        text=element_text(size=11),
+  )
+
+new_sum_confi_con3p <- new_sum_confi_con3 %>%
+  ggplot(aes(x=when, y=mean, group=condition_no)) +
+  geom_line()+
+  #scale_linetype_manual(values=c("solid", "dashed", "dotted"), name = "Condition")+
+  #scale_colour_manual(values=c("#E21818", "#2b9348", "#1565c0"), name = "Condition") +
+  geom_point(size = 2) +
+  ylim(1.5, 3) +
+  labs(y = "Self-Confidence Level") +
+  scale_x_discrete(expand = c(0.15, 0.1), labels = c("Beginning of Reflection",
+                              "End of Reflection")) +
+  theme_bw() +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=0.03,
+                ) +
+  ggtitle("Revision of Important Slides") +
+  theme(
+        plot.title = element_text(hjust = 0.5, size=12),
+        legend.position = c(0.9, 0.85),
+        #legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        text=element_text(size=11),
+  )
+```
+
+```{r fig.height=4.3, fig.width=12.8}
+grid.arrange(new_sum_confi_con1p,
+             new_sum_confi_con2p,
+             new_sum_confi_con3p,
+             ncol=3, nrow = 1,
+             top=textGrob("Change in Self-Confidence based on Engagement in Reflection Activity in Study-2", gp = gpar(col = "black", fontsize = 18)),
+             left=textGrob("Self-Confidence Level", rot = 90)) 
+```
+
+
+
+
